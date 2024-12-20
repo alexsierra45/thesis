@@ -1,2 +1,51 @@
 \chapter*{Introducción}\label{chapter:introduction}
 \addcontentsline{toc}{chapter}{Introducción}
+
+En la era del big data, la capacidad de analizar e interpretar datos complejos de trayectorias humanas se ha convertido en un 
+elemento esencial para comprender y gestionar dinámicas sociales, urbanas y ambientales. Este análisis, impulsado por datos 
+recolectados a través de la telefonía móvil, no solo permite identificar patrones de movilidad humana, sino que también informa 
+la planificación urbana, optimiza el transporte y guía la formulación de políticas públicas. Sin embargo, estos datos suelen ser 
+incompletos o dispersos debido a factores como la pérdida de señal o limitaciones en las capacidades de seguimiento. Por lo tanto, 
+abordar los desafíos relacionados con su completamiento es crucial.
+
+Dentro de este panorama, el completamiento de trayectorias humanas a partir de datos escasos representa un desafío significativo 
+en nuestro país. En contextos de desarrollo como Cuba, donde la digitalización está en crecimiento pero los recursos y datos 
+disponibles son limitados, los datos recolectados mediante la telefonía móvil ofrecen una oportunidad invaluable. Sin embargo, 
+la dispersión, incompletitud e irregularidad en el tiempo de los datos, debido a apagones y averías en el sistema de 
+telecomunicaciones, dificultan en gran medida este proceso. Por tal motivo se hace necesario desarrollar soluciones adaptadas a 
+nuestras particularidades.
+
+En los últimos años, diversas investigaciones han explorado métodos para el completamiento y la predicción de trayectorias, 
+abarcando desde técnicas clásicas de interpolación hasta enfoques más recientes de aprendizaje profundo. En esto ha tenido un 
+gran impacto la competencia HuMob (Human Mobility) Challenge que se propone anualmente romper el estado del arte de los modelos 
+computacionales para la predicción de patrones de movilidad humana. Sin embargo, la mayoría de los enfoques están casi siempre 
+orientados a entornos con abundancia de datos, dejando una brecha en la literatura sobre contextos con datos limitados. Destacan 
+entonces enfoques como el de GRFTrajRec con una representación de trayectorias basada en grafos, la cual mejora la comprensión 
+de las interacciones entre trayectorias y redes viales; gracias a un modelo seq2seq basado en intervalos espaciotemporales. Por 
+su parte, los datos de registros de llamadas (CDR) en conjunto con un punto de vista basado en factorización tensorial permite 
+reconstruir trayectorias individuales con alta precisión, incluso con solo el 1$\%$ de los datos originales. El uso de datos de 
+telefonía en Cuba ha permitido analizar patrones de movilidad en diversas situaciones, como durante la pandemia de COVID-19, y 
+ha sido fundamental en la integración de modelos para la propagación de epidemias. De igual forma, estudios han aprovechado estos 
+datos para actualizar áreas de ubicación y comprender los flujos de movilidad entre zonas de transporte, lo que contribuye 
+significativamente a la toma de decisiones y al control de crisis.
+
+A diferencia de las investigaciones anteriores este trabajo se centra en evaluar la aplicabilidad y el desempeño de TrajBERT, 
+un modelo basado en la arquitectura de transformer que permite aprovechar la información espacial y temporal. Este estudio se 
+enfoca en adaptar el modelo a las particularidades locales, al emplear datos cubanos recolectados mediante telefonía móvil. 
+Finalmente, se busca identificar tanto las fortalezas como las limitaciones del modelo, contribuyendo al avance del conocimiento 
+en el campo.
+
+\textbf{Obejtivo General}: Investigar la aplicabilidad y adaptabilidad del modelo TrajBERT para el completamiento de trayectorias 
+humanas en el contexto cubano, utilizando datos recolectados mediante telefonía móvil, evaluando su desempeño en comparación con 
+métodos tradicionales.
+
+\textbf{Obejtivos Específicos}:
+
+\begin{enumerate}
+    \item Analizar las fortalezas y debilidades del modelo TrajBERT en el contexto del completamiento de trayectorias, evaluando 
+    su arquitectura y capacidades técnicas.
+    \item Implementar TrajBERT utilizando una base de datos de trayectorias cubanas recopiladas a través de la telefonía móvil 
+    para evaluar su desempeño en la recuperación de trayectorias individuales.
+    \item Comparar los resultados obtenidos por TrajBERT con los de métodos tradicionales y soluciones existentes en el campo, 
+    identificando las diferencias en precisión y efectividad.
+\end{enumerate}

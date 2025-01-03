@@ -32,7 +32,7 @@ class Exp_Main(Exp_Basic):
         return optimizer
 
     def _select_criterion(self):
-        if self.args.loss == 'loss' :
+        if self.args.loss == 'loss':
             criterion = nn.CrossEntropyLoss()
         else:
             criterion = Loss_Function()
@@ -43,7 +43,7 @@ class Exp_Main(Exp_Basic):
 
         test_loader = self.data_provider.get_loader(flag='test',args = self.args)
 
-        if self.args.load_checkpoint  and os.path.exists(self.args.root_path + 'checkpoint/' + setting + '.pth'):
+        if self.args.load_checkpoint and os.path.exists(self.args.root_path + 'checkpoint/' + setting + '.pth'):
             state_dict = torch.load(self.args.root_path + 'checkpoint/' + setting + '.pth', map_location=self.device)
             self.model.load_state_dict(state_dict['model'])
             print('load model ' + self.args.root_path + 'checkpoint/' + setting + '.pth' + ' success')
@@ -66,13 +66,7 @@ class Exp_Main(Exp_Basic):
                 model_optim.zero_grad()
                 logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids,input_next,input_prior,input_prior_dis,input_next_dis)
                
-                if self.args.loss == "spatial_loss":
-                    loss_lm = criterion.Spatial_Loss(self.exchange_map, logits_lm.view(-1, self.vocab_size),
-                                                    masked_tokens.view(-1))
-                else:
-                    loss_lm = criterion(logits_lm.view(-1, self.vocab_size), masked_tokens.view(-1))
-                
-                loss = (loss_lm.float()).mean()
+                loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
 
                 train_loss.append(loss)
                 
@@ -118,12 +112,8 @@ class Exp_Main(Exp_Basic):
 
                 logits_lm_ = torch.topk(logits_lm, 100, dim=2)[1]
                 predict_prob = torch.cat([predict_prob, logits_lm_], dim=0)
-                if self.args.loss == "spatial_loss":
-                    loss_lm = criterion.Spatial_Loss(self.exchange_map, logits_lm.view(-1, self.vocab_size),
-                                                    masked_tokens.view(-1))
-                else:
-                    loss_lm = criterion(logits_lm.view(-1, self.vocab_size), masked_tokens.view(-1))
-                loss = (loss_lm.float()).mean()
+                
+                loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
 
                 total_loss.append(loss)
 
@@ -171,6 +161,16 @@ class Exp_Main(Exp_Basic):
         f.close()
 
         return
+    
+    def calculate_loss(self, logits_lm, masked_tokens, criterion):
+        if self.args.loss == "spatial_loss":
+            loss_lm = criterion.Spatial_Loss(self.exchange_map, logits_lm.view(-1, self.vocab_size),
+                                            masked_tokens.view(-1))
+        else:
+            loss_lm = criterion(logits_lm.view(-1, self.vocab_size), masked_tokens.view(-1))
+        loss = (loss_lm.float()).mean()
+
+        return loss
     
     def get_best_score(self,setting):
         best_score_file = self.args.root_path + 'middata/best_score.pkl'

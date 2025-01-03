@@ -245,3 +245,9 @@ class data_provider():
                                                test_input_next_dis), 64, True)
             
             return loader
+        
+    def get_vocabsize(self):
+        return self.vocab_size
+
+    def get_coocurrence_map(self):
+        return self.coocurrence_map

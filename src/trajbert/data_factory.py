@@ -159,7 +159,7 @@ def make_test_data(test_data, word2idx):
 def get_dis_score(dis):
     return 1 / math.log(1 + dis, 2)
 
-def get_id_pn(input_ids, masked_pos):
+def get_id_pn(input_ids, masked_pos, seq_len):
     input_prior = []
     input_next = []
     input_prior_dis = [] 
@@ -177,7 +177,7 @@ def get_id_pn(input_ids, masked_pos):
                     ids_prior.append(seq[j])
                     ids_prior_dis.append(get_dis_score(abs(pos - j)))
                     break
-            for j in range(pos + 1, 50):
+            for j in range(pos + 1, seq_len):
                 if seq[j] != 0 and seq[j] != 3:
                     ids_next.append(seq[j])
                     ids_next_dis.append(get_dis_score(abs(pos - j)))
@@ -206,7 +206,7 @@ class data_provider():
             self.total_data = make_train_data(self.train_token_list, self.word2idx, int(self.args.pre_len)) 
 
             input_ids, masked_tokens, masked_pos = zip(*self.total_data)
-            input_prior, input_next, input_prior_dis, input_next_dis = get_id_pn(input_ids,masked_pos)
+            input_prior, input_next, input_prior_dis, input_next_dis = get_id_pn(input_ids, masked_pos, self.args.seq_len)
 
             input_prior = torch.LongTensor(input_prior).to(device)
             input_next = torch.LongTensor(input_next).to(device)

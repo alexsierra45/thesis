@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch import optim
 
 from trajbert.loss import Loss_Function
+from trajbert.model.bert import BERT
 from trajbert.utils import adjust_learning_rate, get_evalution
 
 class Exp_Main(Exp_Basic):
@@ -21,7 +22,7 @@ class Exp_Main(Exp_Basic):
 
     def _build_model(self,vocab_size):
         model_dict = {
-            'trajbert':'BERT'
+            'trajbert': BERT
         }
         model = model_dict[self.args.model](args = self.args,vocab_size = vocab_size).float()
 
@@ -62,9 +63,9 @@ class Exp_Main(Exp_Basic):
 
             train_loader = self.data_provider.get_loader(flag='train', args = self.args)
             
-            for _, (input_ids, masked_tokens, masked_pos, user_ids, day_ids,input_next,input_prior,input_prior_dis,input_next_dis) in enumerate(tqdm(train_loader, ncols=100)):
+            for _, (input_ids, masked_tokens, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis) in enumerate(tqdm(train_loader, ncols=100)):
                 model_optim.zero_grad()
-                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids,input_next,input_prior,input_prior_dis,input_next_dis)
+                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis)
                
                 loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
 

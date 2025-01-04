@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch import optim
 
 from trajbert.loss import Loss_Function
-from trajbert.model.bert import BERT
+from trajbert.model.bert import TrajBERT
 from trajbert.utils import adjust_learning_rate, get_evalution
 
 class Exp_Main(Exp_Basic):
@@ -22,7 +22,7 @@ class Exp_Main(Exp_Basic):
 
     def _build_model(self,vocab_size):
         model_dict = {
-            'trajbert': BERT
+            'trajbert': TrajBERT
         }
         model = model_dict[self.args.model](args = self.args,vocab_size = vocab_size).float()
 

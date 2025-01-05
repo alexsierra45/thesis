@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from trajbert.model.embedding import Embedding
-from trajbert.model.encoder import EncoderLayer
-from trajbert.model.utils import gelu, get_attn_pad_mask
+from .embedding import Embedding
+from .encoder import EncoderLayer
+from .utils import gelu, get_attn_pad_mask
 
 class TrajBERT(nn.Module):
     def __init__(self, args, vocab_size):

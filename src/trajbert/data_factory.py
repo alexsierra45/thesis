@@ -1,12 +1,12 @@
 import math
 import torch.utils.data as Data
-from dataset import DataSet
-from trajbert.utils import make_coocurrence_matrix
-
 import torch
 from random import *
 import os
 import pandas as pd
+
+from dataset import DataSet
+from utils import make_coocurrence_matrix
 
 class MyDataSet(Data.Dataset):
     def __init__(self, input_ids, masked_tokens, masked_pos, user_ids, day_ids, input_prior, input_next,
@@ -30,27 +30,14 @@ class MyDataSet(Data.Dataset):
 
 def data_preprocess(args):
     device = 'cuda:%s' % str(args.gpu)
-    if args.data_type == 'cdr' :
-        train_data_name = "cdr/train_traj_%s.h5" % args.pre_len
+
+    if args.data_type in ['cdr', 'tdrive', 'etecsa', 'humob']:
+        train_data_name = f'{args.data_type}/train_traj_{args.pre_len}.h5'
         if args.is_training:
-            test_data_name ="cdr/test_traj_%s.h5" % args.pre_len
+            test_data_name = f'{args.data_type}/test_traj_{args.pre_len}.h5'
         else:
-            test_data_name = args.infer_data_path
-        
-    elif args.data_type == 'tdrive':
-
-        train_data_name = "tdrive/train2_traj_5.h5" 
-        if args.is_training:
-            test_data_name ="tdrive/test2_traj_5.h5" 
-        else:
-            test_data_name = args.infer_data_path
-
-    elif args.data_type == 'etecsa':
-        pass
-
-    elif args.data_type == 'humob':
-        pass
-
+            test_data_name = f'{args.data_type}/test_traj_{args.pre_len}.h5'
+            # test_data_name = args.infer_data_path
     else:
         raise Exception('please check data type', args.data_type)
     
@@ -62,6 +49,7 @@ def data_preprocess(args):
     
     train_data = dataset.gen_train_data()  # [seq, user_index, day]
     test_data = dataset.gen_test_data()  # [seq, masked_pos, masked_tokens, user_index, day]
+
     train_word_list = list(
         set(str(train_data[i][0][j]) for i in range(len(train_data)) for j in range(len(train_data[i][0]))))
     test_word_list = list(
@@ -70,9 +58,11 @@ def data_preprocess(args):
         set(str(test_data[i][2][j]) for i in range(len(test_data)) for j in range(len(test_data[i][2]))))
     train_word_list.remove('[PAD]')
     test_word_list.remove('[PAD]')
+
     try:
         test_word_list.remove('[MASK]')
-    except:pass
+    except:
+        pass
     
     train_word_list.extend(test_word_list)
     train_word_list.extend(test_masked_list)
@@ -109,7 +99,7 @@ def data_preprocess(args):
 
     coocurrence_map = make_coocurrence_matrix(token_list=train_token_list, token_size=vocab_size)
     coocurrence_map = torch.Tensor(coocurrence_map).to(device)
-    print('vocab size: ',vocab_size)
+    print('vocab size: ', vocab_size)
 
     return vocab_size, coocurrence_map, train_user_list, train_day_list, train_token_list, word2idx, test_data
 
@@ -226,7 +216,7 @@ class data_provider():
             self.test_total_data = make_test_data(self.test_data, self.word2idx)
             
             test_input_ids, test_masked_tokens, test_masked_pos, test_user_ids, test_day_ids = zip(*self.test_total_data)
-            test_input_prior, test_input_next, test_input_prior_dis, test_input_next_dis = get_id_pn(test_input_ids, test_masked_pos)
+            test_input_prior, test_input_next, test_input_prior_dis, test_input_next_dis = get_id_pn(test_input_ids, test_masked_pos, self.args.seq_len)
             
             test_input_ids = torch.LongTensor(test_input_ids).to(device)
             test_masked_tokens = torch.LongTensor(test_masked_tokens).to(device)

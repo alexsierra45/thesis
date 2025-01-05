@@ -8,11 +8,11 @@ def main(parser = None):
         parser = argparse.ArgumentParser()
     
         # data loader
-        parser.add_argument('--root_path', type=str, default='', help='root path') 
+        parser.add_argument('--root_path', type=str, default='src/trajbert', help='root path') 
         parser.add_argument('--data_path', type=str, default='./data/', help='data path ') 
         
         parser.add_argument('--pre_len', type=str, default='5', help='predict len') 
-        parser.add_argument('--data_type', type=str, default='cdr', help='database name')
+        parser.add_argument('--data_type', type=str, default='tdrive', help='database name')
         parser.add_argument('--infer_data_path', type=str, default='', help='infer data path ') 
         parser.add_argument('--infer_model_path', type=str, default='', help='infer model path ')
 
@@ -23,7 +23,7 @@ def main(parser = None):
         parser.add_argument('--layer', default=2, type=int, help='layer')
         parser.add_argument('--seq_len', default=50, type=int, help='sequence lenght')
         parser.add_argument('--if_posiemb', default=1, type=int, help='position embedding')
-        parser.add_argument('--use_his', default=1, type=int,vhelp='use temporal reference') 
+        parser.add_argument('--use_his', default=1, type=int, help='use temporal reference') 
         parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
         parser.add_argument('--lradj', type=str, default='type0', help='adjust learning rate')
 
@@ -36,7 +36,7 @@ def main(parser = None):
         parser.add_argument('--load_checkpoint', default=0, type=int, help='if continue train')
 
         parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
-        parser.add_argument('--gpu', type=int, default=1, help='gpu')
+        parser.add_argument('--gpu', type=int, default=0, help='gpu')
 
     args = parser.parse_args()
 
@@ -79,8 +79,6 @@ def main(parser = None):
                 args.bs,
                 args.epoch,
                 args.if_posiemb,
-                args.relative_v,
-                args.remask,
                 args.use_his,
                 str(args.lr).split('.')[1],
                 ii)

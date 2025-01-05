@@ -1,6 +1,6 @@
 import torch.nn as nn
-from trajbert.model.attention import MultiHeadAttention
-from trajbert.model.utils import gelu
+from .attention import MultiHeadAttention
+from .utils import gelu
 
 class PoswiseFeedForwardNet(nn.Module):
     def __init__(self,args):

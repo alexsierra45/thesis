@@ -32,12 +32,12 @@ def data_preprocess(args):
     device = 'cuda:%s' % str(args.gpu)
 
     if args.data_type in ['cdr', 'tdrive', 'etecsa', 'humob']:
-        train_data_name = f'{args.data_type}/train_traj_{args.pre_len}.h5'
+        train_data_name = f'{args.data_type}/train.h5'
         if args.is_training:
-            test_data_name = f'{args.data_type}/test_traj_{args.pre_len}.h5'
+            test_data_name = f'{args.data_type}/{'test' if args.data_type in ['cdr', 'tdrive'] 
+                                                 else 'valid'}_{args.pre_len}.h5'
         else:
-            test_data_name = f'{args.data_type}/test_traj_{args.pre_len}.h5'
-            # test_data_name = args.infer_data_path
+            test_data_name = f'{args.data_type}/test_{args.pre_len}.h5'
     else:
         raise Exception('please check data type', args.data_type)
     
@@ -167,11 +167,14 @@ def get_id_pn(input_ids, masked_pos, seq_len):
                     ids_prior.append(seq[j])
                     ids_prior_dis.append(get_dis_score(abs(pos - j)))
                     break
-            for j in range(pos + 1, seq_len):
+            for j in range(pos, seq_len):
                 if seq[j] != 0 and seq[j] != 3:
                     ids_next.append(seq[j])
-                    ids_next_dis.append(get_dis_score(abs(pos - j)))
+                    ids_next_dis.append(get_dis_score(abs(j - pos + 1)))
                     break
+
+        if len(ids_prior) < 5 or len(ids_next) < 5:
+            print('stop')
                 
         input_prior.append(ids_prior)
         input_next.append(ids_next)

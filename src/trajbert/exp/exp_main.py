@@ -192,7 +192,7 @@ class Exp_Main(Exp_Basic):
         if setting not in score_data:
             score_data[setting] = 0
         best_score = score_data[setting]
-        print(setting, ' history best socre ', best_score)
+        print(setting, ' history best score ', best_score)
 
         return best_score, score_data
     

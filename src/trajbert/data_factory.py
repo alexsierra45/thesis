@@ -32,7 +32,7 @@ def data_preprocess(args):
     device = 'cuda:%s' % str(args.gpu)
 
     if args.data_type in ['cdr', 'tdrive', 'etecsa', 'humob']:
-        train_data_name = f'{args.data_type}/train_{args.pre_len}.h5'
+        train_data_name = f'{args.data_type}/train.h5'
         if args.is_training:
             test_data_name = f'{args.data_type}/{'test' if args.data_type in ['cdr', 'tdrive'] 
                                                  else 'valid'}_{args.pre_len}.h5'

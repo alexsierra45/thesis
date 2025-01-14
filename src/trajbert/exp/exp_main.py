@@ -79,7 +79,7 @@ class Exp_Main(Exp_Basic):
             if (epoch + 1) % 2 == 0:
                 
                 torch.save({'model': self.model.state_dict()}, self.args.root_path + '/checkpoint/' + setting + '.pth')
-                result, test_loss, accuracy_score, wrong_pre = self.test(test_loader, criterion)
+                result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
                 tmp_best_score = max(tmp_best_score, accuracy_score)
                 if accuracy_score >= best_score:
                     torch.save({'model': self.model.state_dict()}, self.args.root_path + '/result/' + setting + '.pth')
@@ -105,6 +105,7 @@ class Exp_Main(Exp_Basic):
         self.model.eval()
         predict_prob = torch.Tensor([]).to(self.device)
         total_masked_tokens = np.array([])
+        predictions = []
 
         with torch.no_grad():
             for i, (input_ids, masked_tokens, masked_pos, user_ids, day_ids,input_next,input_prior,input_prior_dis,input_next_dis) in enumerate(tqdm.tqdm(test_loader,ncols=100)):
@@ -112,6 +113,18 @@ class Exp_Main(Exp_Basic):
                 logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis)
 
                 logits_lm_ = torch.topk(logits_lm, 100, dim=2)[1]
+                logits_lm_topk = torch.topk(logits_lm, 100, dim=2)
+                logits_lm_values = logits_lm_topk[0]
+                logits_lm_indices = logits_lm_topk[1]
+
+                batch_predictions = {
+                    "input_ids": input_ids.cpu().numpy(),
+                    "masked_tokens": masked_tokens.cpu().numpy(),
+                    "predicted_indices": logits_lm_indices.cpu().numpy(),
+                    "predicted_probs": logits_lm_values.cpu().numpy()
+                }
+                predictions.append(batch_predictions)
+
                 predict_prob = torch.cat([predict_prob, logits_lm_], dim=0)
                 
                 loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
@@ -132,9 +145,9 @@ class Exp_Main(Exp_Basic):
             + 'test top30 score = '+ '{:.6f}'.format(top30_score) + '\n'\
             + 'test top50 score = '+ '{:.6f}'.format(top50_score) + '\n'\
             + 'test top100 score = '+ '{:.6f}'.format(top100_score) + '\n' \
-            + 'test MAP score = '+ '{:.6f}'.format(map_score) + '\n' , total_loss, accuracy_score, wrong_pre
+            + 'test MAP score = '+ '{:.6f}'.format(map_score) + '\n' , total_loss, accuracy_score, wrong_pre, predictions
         
-    def infer(self,setting):
+    def infer(self, setting):
         infer_result_path = self.args.root_path + '/infer_result'
         if not os.path.exists(infer_result_path):
             os.mkdir(infer_result_path)
@@ -153,7 +166,7 @@ class Exp_Main(Exp_Basic):
         
         test_loader = self.data_provider.get_loader(flag='infer', args = self.args)
         criterion = self._select_criterion()
-        result, test_loss, accuracy_score, wrong_pre = self.test(test_loader, criterion)
+        result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
 
         f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
         f.write("test loss: %.6f \n" %  test_loss)

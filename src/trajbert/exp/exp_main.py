@@ -63,9 +63,13 @@ class Exp_Main(Exp_Basic):
 
             train_loader = self.data_provider.get_loader(flag='train', args = self.args)
             
-            for _, (input_ids, masked_tokens, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis) in enumerate(tqdm.tqdm(train_loader, ncols=100)):
+            for _, (input_ids, masked_tokens, masked_pos, user_ids, 
+                    day_ids, input_next, input_prior, 
+                    input_prior_dis, input_next_dis, input_mask) in enumerate(tqdm.tqdm(train_loader, ncols=100)):
                 model_optim.zero_grad()
-                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis)
+                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, 
+                                       input_next, input_prior, input_prior_dis, 
+                                       input_next_dis, input_mask)
                
                 loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
 
@@ -103,33 +107,64 @@ class Exp_Main(Exp_Basic):
     def test(self, test_loader, criterion):
         total_loss = []
         self.model.eval()
-        predict_prob = torch.Tensor([]).to(self.device)
-        total_masked_tokens = np.array([])
+        predict_prob = None  # Inicialización en None
+        total_masked_tokens = []  # Cambiar a lista para evitar acumulación innecesaria en memoria GPU
         predictions = []
 
         with torch.no_grad():
-            for i, (input_ids, masked_tokens, masked_pos, user_ids, day_ids,input_next,input_prior,input_prior_dis,input_next_dis) in enumerate(tqdm.tqdm(test_loader,ncols=100)):
-                total_masked_tokens = np.append(total_masked_tokens, np.array(masked_tokens.cpu()).reshape(-1)).astype(int)
-                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis)
+            for i, (input_ids, masked_tokens, masked_pos, user_ids, 
+                    day_ids, input_next, input_prior, 
+                    input_prior_dis, input_next_dis, input_mask) in enumerate(tqdm.tqdm(test_loader, ncols=100)):
 
-                logits_lm_ = torch.topk(logits_lm, 100, dim=2)[1]
-                logits_lm_topk = torch.topk(logits_lm, 100, dim=2)
-                logits_lm_values = logits_lm_topk[0]
-                logits_lm_indices = logits_lm_topk[1]
+                # Pasa los datos a través del modelo
+                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, 
+                                    input_next, input_prior, input_prior_dis, 
+                                    input_next_dis, input_mask)
+                
+                # Ajustamos la máscara `input_mask` para que coincida con `logits_lm`
+                batch_size, seq_len, num_classes = logits_lm.size()
+                valid_mask = input_mask[:, :seq_len].unsqueeze(2).expand(-1, -1, num_classes).bool()
 
+                # Filtra logits_lm y masked_tokens utilizando valid_mask
+                logits_lm_filtered = logits_lm[valid_mask]
+                masked_tokens_filtered = masked_tokens[input_mask.bool()]  # Filtrar tokens válidos
+
+                # Convertir a CPU y añadir a total_masked_tokens
+                masked_tokens_filtered_cpu = masked_tokens_filtered.cpu().numpy()
+                total_masked_tokens.extend(masked_tokens_filtered_cpu.flatten().tolist())
+
+                # Reorganizar logits_lm_filtered si es unidimensional
+                if logits_lm_filtered.dim() == 1:
+                    logits_lm_filtered = logits_lm_filtered.view(-1, num_classes)
+
+                logits_lm_ = torch.topk(logits_lm_filtered, 100, dim=1)[1]
+                logits_lm_topk = torch.topk(logits_lm_filtered, 100, dim=1)
+                logits_lm_values = logits_lm_topk[0].cpu()
+                logits_lm_indices = logits_lm_topk[1].cpu()
+
+                # Guardamos las predicciones del batch en la CPU
                 batch_predictions = {
                     "input_ids": input_ids.cpu().numpy(),
-                    "masked_tokens": masked_tokens.cpu().numpy(),
-                    "predicted_indices": logits_lm_indices.cpu().numpy(),
-                    "predicted_probs": logits_lm_values.cpu().numpy()
+                    "masked_tokens": masked_tokens_filtered_cpu,
+                    "predicted_indices": logits_lm_indices.numpy(),
+                    "predicted_probs": logits_lm_values.numpy()
                 }
                 predictions.append(batch_predictions)
 
-                predict_prob = torch.cat([predict_prob, logits_lm_], dim=0)
-                
-                loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
+                # Concatenar predict_prob en la CPU para evitar saturar la GPU
+                if predict_prob is None:
+                    predict_prob = logits_lm_.cpu()  # Mover a CPU
+                else:
+                    predict_prob = torch.cat([predict_prob, logits_lm_.cpu()], dim=0)
 
-                total_loss.append(loss)
+                # Calcula la pérdida solo en las posiciones válidas
+                loss = self.calculate_loss(logits_lm_filtered, masked_tokens_filtered, criterion)
+
+                total_loss.append(loss)  # Asegúrate de mover el loss a la CPU
+
+                # Liberar memoria GPU
+                del logits_lm, logits_lm_filtered, valid_mask
+                torch.cuda.empty_cache()
 
         self.model.train()
         total_loss = torch.mean(torch.stack(total_loss))

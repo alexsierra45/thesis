@@ -12,7 +12,7 @@ def main(parser = None):
         parser.add_argument('--data_path', type=str, default='./data/', help='data path ') 
         
         parser.add_argument('--pre_len', type=str, default='5', help='predict len') 
-        parser.add_argument('--data_type', type=str, default='etecsa', help='database name')
+        parser.add_argument('--data_type', type=str, default='humob', help='database name')
         parser.add_argument('--infer_data_path', type=str, default='', help='infer data path ') 
         parser.add_argument('--infer_model_path', type=str, default='', help='infer model path ')
 

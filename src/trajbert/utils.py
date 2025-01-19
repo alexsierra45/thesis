@@ -58,8 +58,8 @@ def adjust_learning_rate(optimizer, epoch, args):
         print(f'Epoch {epoch}: No learning rate adjustment applied.')
 
 def topk(ground_truth, logits_lm, k):
-    pred_topk = logits_lm[:, :, 0:k]
-    pred_topk = torch.flatten(pred_topk, start_dim=0, end_dim=1).cpu().data.numpy()
+    pred_topk = logits_lm[:, 0:k].cpu().data.numpy()
+    
     topk_token = 0
     for i in range(len(ground_truth)):
         if ground_truth[i] in pred_topk[i]:
@@ -69,7 +69,7 @@ def topk(ground_truth, logits_lm, k):
 
 def map_score(ground_truth, logits_lm):
     MAP = 0
-    pred_topk = torch.flatten(logits_lm, start_dim=0, end_dim=1).cpu().data.numpy()
+    pred_topk = logits_lm.cpu().data.numpy()
     for i in range(len(ground_truth)):
         if ground_truth[i] in pred_topk[i]:
             a = ground_truth[i]
@@ -79,8 +79,8 @@ def map_score(ground_truth, logits_lm):
     return MAP / len(ground_truth)
 
 def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask_len=0):
-    pred_acc = logits_lm[:, :, 0]
-    pred_acc = pred_acc.flatten().cpu().data.numpy()
+    pred_acc = logits_lm[:, 0].cpu().data.numpy()
+    
     accuracy_token = 0
     wrong_pre = []
     per_acu = 0
@@ -93,9 +93,6 @@ def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask
 
     accuracy_score = accuracy_token / len(ground_truth)
     print("top1:", accuracy_token, accuracy_score)
-
-    pred_acc = logits_lm[:, :, 0]
-    pred_acc = pred_acc.flatten().cpu().data.numpy()
 
     fuzzy_accuracy_token = 0
     for i in range(len(pred_acc)):

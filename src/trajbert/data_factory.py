@@ -9,8 +9,8 @@ from dataset import DataSet
 from utils import make_coocurrence_matrix
 
 class MyDataSet(Data.Dataset):
-    def __init__(self, input_ids, masked_tokens, masked_pos, user_ids, day_ids, input_prior, input_next,
-                 input_prior_dis, input_next_dis):
+    def __init__(self, input_ids, masked_tokens, masked_pos, user_ids, day_ids, 
+                 input_prior, input_next, input_prior_dis, input_next_dis):
         self.input_ids = input_ids
         self.masked_tokens = masked_tokens
         self.masked_pos = masked_pos
@@ -24,20 +24,22 @@ class MyDataSet(Data.Dataset):
     def __len__(self):
         return len(self.input_ids)
 
-    def __getitem__(self, idx):
-        return self.input_ids[idx], self.masked_tokens[idx], self.masked_pos[idx], self.user_ids[idx], self.day_ids[
-            idx], self.input_prior[idx], self.input_next[idx], self.input_prior_dis[idx], self.input_next_dis[idx]
+    def __getitem__(self, index):
+        return (self.input_ids[index], self.masked_tokens[index], self.masked_pos[index],
+                self.user_ids[index], self.day_ids[index], self.input_prior[index],
+                self.input_next[index], self.input_prior_dis[index], self.input_next_dis[index])
 
 def data_preprocess(args):
     device = 'cuda:%s' % str(args.gpu)
 
     if args.data_type in ['cdr', 'tdrive', 'etecsa', 'humob']:
         train_data_name = f'{args.data_type}/train.h5'
-        if args.is_training:
+        if args.is_training == 1:
             test_data_name = f'{args.data_type}/{'test' if args.data_type in ['cdr', 'tdrive'] 
                                                  else 'valid'}_{args.pre_len}.h5'
         else:
             test_data_name = f'{args.data_type}/test_{args.pre_len}.h5'
+            # test_data_name = f'{args.data_type}/hidden/test_{args.pre_len}_{int(args.mask_perc * 100)}_{int(args.hid_perc * 100)}.h5'
     else:
         raise Exception('please check data type', args.data_type)
     
@@ -172,9 +174,6 @@ def get_id_pn(input_ids, masked_pos, seq_len):
                     ids_next.append(seq[j])
                     ids_next_dis.append(get_dis_score(abs(j - pos + 1)))
                     break
-
-        if len(ids_prior) < 5 or len(ids_next) < 5:
-            print('stop')
                 
         input_prior.append(ids_prior)
         input_next.append(ids_next)
@@ -184,9 +183,10 @@ def get_id_pn(input_ids, masked_pos, seq_len):
     return input_prior, input_next, input_prior_dis, input_next_dis
 
 class data_provider():
-    def __init__(self,args):
+    def __init__(self, args):
         self.args = args
-        self.vocab_size, self.coocurrence_map, self.train_user_list, self.train_day_list, self.train_token_list, self.word2idx, self.test_data = data_preprocess(args)
+        self.vocab_size, self.coocurrence_map, self.train_user_list, \
+        self.train_day_list, self.train_token_list, self.word2idx, self.test_data = data_preprocess(args)
     
     def get_loader(self, flag, args):
         device = 'cuda:%s' % str(args.gpu)
@@ -201,18 +201,21 @@ class data_provider():
             input_ids, masked_tokens, masked_pos = zip(*self.total_data)
             input_prior, input_next, input_prior_dis, input_next_dis = get_id_pn(input_ids, masked_pos, self.args.seq_len)
 
-            input_prior = torch.LongTensor(input_prior).to(device)
-            input_next = torch.LongTensor(input_next).to(device)
-            input_prior_dis = torch.FloatTensor(input_prior_dis).to(device)
-            input_next_dis = torch.FloatTensor(input_next_dis).to(device)
-            user_ids, day_ids = torch.LongTensor(self.train_user_list).to(device), torch.LongTensor(self.train_day_list).to(device)
-            input_ids, masked_tokens, masked_pos, = torch.LongTensor(input_ids).to(device),  torch.LongTensor(masked_tokens).to(device), torch.LongTensor(masked_pos).to(device)
-            
-            loader = Data.DataLoader(MyDataSet(input_ids, masked_tokens, masked_pos, 
-                                               user_ids, day_ids, input_prior, 
-                                               input_next, input_prior_dis, 
-                                               input_next_dis), self.args.bs, True)
-            
+            # Crear el dataset con tensores
+            dataset = MyDataSet(
+                [torch.tensor(item).to(device) for item in input_ids],
+                [torch.tensor(item).to(device) for item in masked_tokens],
+                [torch.tensor(item).to(device) for item in masked_pos],
+                torch.LongTensor(self.train_user_list).to(device),
+                torch.LongTensor(self.train_day_list).to(device),
+                [torch.tensor(item).to(device) for item in input_prior],
+                [torch.tensor(item).to(device) for item in input_next],
+                [torch.tensor(item).to(device) for item in input_prior_dis],
+                [torch.tensor(item).to(device) for item in input_next_dis],
+            )
+
+            # Crear DataLoader con el collate_fn personalizado
+            loader = Data.DataLoader(dataset, batch_size=self.args.bs, shuffle=True, collate_fn=custom_collate_fn)
             return loader
         
         elif flag == 'test' or flag == 'infer':
@@ -220,23 +223,22 @@ class data_provider():
             
             test_input_ids, test_masked_tokens, test_masked_pos, test_user_ids, test_day_ids = zip(*self.test_total_data)
             test_input_prior, test_input_next, test_input_prior_dis, test_input_next_dis = get_id_pn(test_input_ids, test_masked_pos, self.args.seq_len)
-            
-            test_input_ids = torch.LongTensor(test_input_ids).to(device)
-            test_masked_tokens = torch.LongTensor(test_masked_tokens).to(device)
-            test_masked_pos = torch.LongTensor(test_masked_pos).to(device)
-            test_user_ids = torch.LongTensor(test_user_ids).to(device) 
-            test_day_ids = torch.LongTensor(test_day_ids).to(device)
-            test_input_prior = torch.LongTensor(test_input_prior).to(device)
-            test_input_next = torch.LongTensor(test_input_next).to(device)
-            test_input_prior_dis = torch.FloatTensor(test_input_prior_dis).to(device)
-            test_input_next_dis = torch.FloatTensor(test_input_next_dis).to(device)
 
-            loader = Data.DataLoader(MyDataSet(test_input_ids, test_masked_tokens, 
-                                               test_masked_pos, test_user_ids, 
-                                               test_day_ids, test_input_prior, 
-                                               test_input_next, test_input_prior_dis, 
-                                               test_input_next_dis), 64, True)
-            
+            # Crear el dataset con tensores
+            dataset = MyDataSet(
+                [torch.tensor(item).to(device) for item in test_input_ids],
+                [torch.tensor(item).to(device) for item in test_masked_tokens],
+                [torch.tensor(item).to(device) for item in test_masked_pos],
+                torch.LongTensor(test_user_ids).to(device),
+                torch.LongTensor(test_day_ids).to(device),
+                [torch.tensor(item).to(device) for item in test_input_prior],
+                [torch.tensor(item).to(device) for item in test_input_next],
+                [torch.tensor(item).to(device) for item in test_input_prior_dis],
+                [torch.tensor(item).to(device) for item in test_input_next_dis],
+            )
+
+            # Crear DataLoader con el collate_fn personalizado
+            loader = Data.DataLoader(dataset, batch_size=64, shuffle=True, collate_fn=custom_collate_fn)
             return loader
         
     def get_vocabsize(self):
@@ -244,3 +246,34 @@ class data_provider():
 
     def get_coocurrence_map(self):
         return self.coocurrence_map
+    
+from torch.nn.utils.rnn import pad_sequence
+    
+def custom_collate_fn(batch):
+    """
+    Maneja el relleno dinámico y genera máscaras para las secuencias de longitud variable.
+    """
+    # Separar los componentes del lote
+    input_ids, masked_tokens, masked_pos, user_ids, day_ids, \
+    input_prior, input_next, input_prior_dis, input_next_dis = zip(*batch)
+
+    # Rellenar dinámicamente las secuencias
+    input_ids = pad_sequence(input_ids, batch_first=True, padding_value=0)
+    masked_tokens = pad_sequence(masked_tokens, batch_first=True, padding_value=0)
+    masked_pos = pad_sequence(masked_pos, batch_first=True, padding_value=0)
+    input_prior = pad_sequence(input_prior, batch_first=True, padding_value=0)
+    input_next = pad_sequence(input_next, batch_first=True, padding_value=0)
+
+    # Rellenar las distancias (que son tensores de punto flotante)
+    input_prior_dis = pad_sequence(input_prior_dis, batch_first=True, padding_value=0.0)
+    input_next_dis = pad_sequence(input_next_dis, batch_first=True, padding_value=0.0)
+
+    # Las máscaras binarias: 1 para valores válidos, 0 para relleno
+    input_mask = (masked_tokens != 0).long()
+
+    # Convertir user_ids y day_ids a tensores
+    user_ids = torch.stack(user_ids)
+    day_ids = torch.stack(day_ids)
+
+    return (input_ids, masked_tokens, masked_pos, user_ids, day_ids, 
+            input_prior, input_next, input_prior_dis, input_next_dis, input_mask)

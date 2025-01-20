@@ -63,9 +63,13 @@ class Exp_Main(Exp_Basic):
 
             train_loader = self.data_provider.get_loader(flag='train', args = self.args)
             
-            for _, (input_ids, masked_tokens, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis) in enumerate(tqdm.tqdm(train_loader, ncols=100)):
+            for _, (input_ids, masked_tokens, masked_pos, user_ids, 
+                    day_ids, input_next, input_prior, 
+                    input_prior_dis, input_next_dis, input_mask) in enumerate(tqdm.tqdm(train_loader, ncols=100)):
                 model_optim.zero_grad()
-                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis)
+                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, 
+                                       input_next, input_prior, input_prior_dis, 
+                                       input_next_dis, input_mask)
                
                 loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
 
@@ -103,38 +107,70 @@ class Exp_Main(Exp_Basic):
     def test(self, test_loader, criterion):
         total_loss = []
         self.model.eval()
-        predict_prob = torch.Tensor([]).to(self.device)
-        total_masked_tokens = np.array([])
+        predict_prob = None  # Inicialización en None
+        total_masked_tokens = []  # Cambiar a lista para evitar acumulación innecesaria en memoria GPU
         predictions = []
 
         with torch.no_grad():
-            for i, (input_ids, masked_tokens, masked_pos, user_ids, day_ids,input_next,input_prior,input_prior_dis,input_next_dis) in enumerate(tqdm.tqdm(test_loader,ncols=100)):
-                total_masked_tokens = np.append(total_masked_tokens, np.array(masked_tokens.cpu()).reshape(-1)).astype(int)
-                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, input_next, input_prior, input_prior_dis, input_next_dis)
+            for i, (input_ids, masked_tokens, masked_pos, user_ids, 
+                    day_ids, input_next, input_prior, 
+                    input_prior_dis, input_next_dis, input_mask) in enumerate(tqdm.tqdm(test_loader, ncols=100)):
 
-                logits_lm_ = torch.topk(logits_lm, 100, dim=2)[1]
-                logits_lm_topk = torch.topk(logits_lm, 100, dim=2)
-                logits_lm_values = logits_lm_topk[0]
-                logits_lm_indices = logits_lm_topk[1]
+                # Pasa los datos a través del modelo
+                logits_lm = self.model(input_ids, masked_pos, user_ids, day_ids, 
+                                    input_next, input_prior, input_prior_dis, 
+                                    input_next_dis, input_mask)
+                
+                # Ajustamos la máscara `input_mask` para que coincida con `logits_lm`
+                batch_size, seq_len, num_classes = logits_lm.size()
+                # valid_mask = input_mask[:, :seq_len].unsqueeze(2).expand(-1, -1, num_classes).bool()
+                valid_mask = input_mask.unsqueeze(-1).expand_as(logits_lm).bool()
 
+                # Filtra logits_lm y masked_tokens utilizando valid_mask
+                logits_lm_filtered = logits_lm[valid_mask]
+                masked_tokens_filtered = masked_tokens[input_mask.bool()]  # Filtrar tokens válidos
+
+                # Convertir a CPU y añadir a total_masked_tokens
+                masked_tokens_filtered_cpu = masked_tokens_filtered.cpu().numpy()
+                total_masked_tokens.extend(masked_tokens_filtered_cpu.flatten().tolist())
+
+                # Reorganizar logits_lm_filtered si es unidimensional
+                if logits_lm_filtered.dim() == 1:
+                    logits_lm_filtered = logits_lm_filtered.view(-1, num_classes)
+
+                logits_lm_ = torch.topk(logits_lm_filtered, 100, dim=1)[1]
+                logits_lm_topk = torch.topk(logits_lm_filtered, 100, dim=1)
+                logits_lm_values = logits_lm_topk[0].cpu()
+                logits_lm_indices = logits_lm_topk[1].cpu()
+
+                # Guardamos las predicciones del batch en la CPU
                 batch_predictions = {
                     "input_ids": input_ids.cpu().numpy(),
-                    "masked_tokens": masked_tokens.cpu().numpy(),
-                    "predicted_indices": logits_lm_indices.cpu().numpy(),
-                    "predicted_probs": logits_lm_values.cpu().numpy()
+                    "masked_tokens": masked_tokens_filtered_cpu,
+                    "predicted_indices": logits_lm_indices.numpy(),
+                    "predicted_probs": logits_lm_values.numpy()
                 }
                 predictions.append(batch_predictions)
 
-                predict_prob = torch.cat([predict_prob, logits_lm_], dim=0)
-                
-                loss = self.calculate_loss(logits_lm, masked_tokens, criterion)
+                # Concatenar predict_prob en la CPU para evitar saturar la GPU
+                if predict_prob is None:
+                    predict_prob = logits_lm_.cpu()  # Mover a CPU
+                else:
+                    predict_prob = torch.cat([predict_prob, logits_lm_.cpu()], dim=0)
 
-                total_loss.append(loss)
+                # Calcula la pérdida solo en las posiciones válidas
+                loss = self.calculate_loss(logits_lm_filtered, masked_tokens_filtered, criterion)
+
+                total_loss.append(loss)  # Asegúrate de mover el loss a la CPU
+
+                # Liberar memoria GPU
+                del logits_lm, logits_lm_filtered, valid_mask
+                torch.cuda.empty_cache()
 
         self.model.train()
         total_loss = torch.mean(torch.stack(total_loss))
 
-        accuracy_score, fuzzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, map_score, wrong_pre = get_evalution(
+        accuracy_score, fuzzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, map_score, manhattan_distance, wrong_pre = get_evalution(
         ground_truth=total_masked_tokens, logits_lm=predict_prob, exchange_matrix=self.exchange_map)
 
         return 'test accuracy score = ' + '{:.6f}'.format(accuracy_score) + '\n' \
@@ -145,6 +181,7 @@ class Exp_Main(Exp_Basic):
             + 'test top30 score = '+ '{:.6f}'.format(top30_score) + '\n'\
             + 'test top50 score = '+ '{:.6f}'.format(top50_score) + '\n'\
             + 'test top100 score = '+ '{:.6f}'.format(top100_score) + '\n' \
+            + 'test manhattan distance = '+ '{:.6f}'.format(manhattan_distance) + '\n' \
             + 'test MAP score = '+ '{:.6f}'.format(map_score) + '\n' , total_loss, accuracy_score, wrong_pre, predictions
         
     def infer(self, setting):
@@ -168,14 +205,59 @@ class Exp_Main(Exp_Basic):
         criterion = self._select_criterion()
         result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
 
-        f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
-        f.write("test loss: %.6f \n" %  test_loss)
-        f.write(result)
-        f.write('\n'.join(wrong_pre))
-        f.close()
+        # f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
+        # f.write("test loss: %.6f \n" %  test_loss)
+        # f.write(result)
+        # f.write('\n'.join(wrong_pre))
+        # f.close()
 
         return
     
+    def evaluate_all_models(self):
+        """
+        Método para evaluar todos los modelos almacenados en la carpeta especificada.
+        """
+        models_folder =self.args.root_path + '/result'
+        infer_result_path = os.path.join(self.args.root_path, 'infer_result')
+        if not os.path.exists(infer_result_path):
+            os.mkdir(infer_result_path)
+
+        # Obtener la lista de modelos en la carpeta
+        model_files = [f for f in os.listdir(models_folder) if f.endswith('.pth')]
+
+        if not model_files:
+            print('No models found in the specified folder:', models_folder)
+            return
+
+        # Evaluar cada modelo
+        for model_file in model_files:
+            setting = os.path.splitext(model_file)[0]  # Extraer el nombre base del modelo
+            model_path = os.path.join(models_folder, model_file)
+
+            # Verificar si el modelo existe
+            if not os.path.exists(model_path):
+                print(f'Model file {model_file} does not exist. Skipping...')
+                continue
+
+            # Cargar el modelo
+            self.load_weight(model_path)
+            print(f'Loaded model {model_file} successfully')
+
+            # Preparar el loader y el criterio de evaluación
+            test_loader = self.data_provider.get_loader(flag='infer', args=self.args)
+            criterion = self._select_criterion()
+
+            # Evaluar el modelo
+            result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
+
+            # Guardar los resultados
+            output_file = os.path.join(infer_result_path, setting + '.txt')
+            with open(output_file, 'w') as f:
+                f.write("Test loss: %.6f\n" % test_loss)
+                f.write(result + '\n')
+                f.write('\n'.join(wrong_pre))
+            print(f'Results for model {model_file} saved in {output_file}')
+
     def calculate_loss(self, logits_lm, masked_tokens, criterion):
         if self.args.loss == "spatial_loss":
             loss_lm = criterion.Spatial_Loss(self.exchange_map, logits_lm.view(-1, self.vocab_size),

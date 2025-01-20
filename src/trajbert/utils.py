@@ -58,8 +58,8 @@ def adjust_learning_rate(optimizer, epoch, args):
         print(f'Epoch {epoch}: No learning rate adjustment applied.')
 
 def topk(ground_truth, logits_lm, k):
-    pred_topk = logits_lm[:, :, 0:k]
-    pred_topk = torch.flatten(pred_topk, start_dim=0, end_dim=1).cpu().data.numpy()
+    pred_topk = logits_lm[:, 0:k].cpu().data.numpy()
+    
     topk_token = 0
     for i in range(len(ground_truth)):
         if ground_truth[i] in pred_topk[i]:
@@ -67,9 +67,20 @@ def topk(ground_truth, logits_lm, k):
     topk_score = topk_token / len(ground_truth)
     return topk_token, topk_score
 
+def manhattan_distance(ground_truth, logits_lm):
+    manhattan_distance = 0
+    pred_topk = logits_lm.cpu().data.numpy()
+    for i in range(len(ground_truth)):
+        a = ground_truth[i]
+        b = pred_topk[i][0]
+        x1, y1 = a // 20, a % 20
+        x2, y2 = b // 20, b % 20
+        manhattan_distance += abs(x1 - x2) + abs(y1 - y2)
+    return manhattan_distance / len(ground_truth)
+
 def map_score(ground_truth, logits_lm):
     MAP = 0
-    pred_topk = torch.flatten(logits_lm, start_dim=0, end_dim=1).cpu().data.numpy()
+    pred_topk = logits_lm.cpu().data.numpy()
     for i in range(len(ground_truth)):
         if ground_truth[i] in pred_topk[i]:
             a = ground_truth[i]
@@ -79,8 +90,8 @@ def map_score(ground_truth, logits_lm):
     return MAP / len(ground_truth)
 
 def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask_len=0):
-    pred_acc = logits_lm[:, :, 0]
-    pred_acc = pred_acc.flatten().cpu().data.numpy()
+    pred_acc = logits_lm[:, 0].cpu().data.numpy()
+    
     accuracy_token = 0
     wrong_pre = []
     per_acu = 0
@@ -93,9 +104,6 @@ def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask
 
     accuracy_score = accuracy_token / len(ground_truth)
     print("top1:", accuracy_token, accuracy_score)
-
-    pred_acc = logits_lm[:, :, 0]
-    pred_acc = pred_acc.flatten().cpu().data.numpy()
 
     fuzzy_accuracy_token = 0
     for i in range(len(pred_acc)):
@@ -125,7 +133,10 @@ def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask
     top100_token, top100_score = topk(ground_truth, logits_lm, 100)
     print("top100:", top100_token, top100_score)
 
+    MANHATTAN = manhattan_distance(ground_truth, logits_lm)
+    print("manhattan distance:", MANHATTAN)
+
     MAP = map_score(ground_truth, logits_lm)
     print("MAP score:", MAP)
 
-    return accuracy_score, fuzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, MAP, wrong_pre
+    return accuracy_score, fuzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, MAP, MANHATTAN, wrong_pre

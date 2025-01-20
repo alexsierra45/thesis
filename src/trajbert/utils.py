@@ -67,6 +67,17 @@ def topk(ground_truth, logits_lm, k):
     topk_score = topk_token / len(ground_truth)
     return topk_token, topk_score
 
+def manhattan_distance(ground_truth, logits_lm):
+    manhattan_distance = 0
+    pred_topk = logits_lm.cpu().data.numpy()
+    for i in range(len(ground_truth)):
+        a = ground_truth[i]
+        b = pred_topk[i][0]
+        x1, y1 = a // 20, a % 20
+        x2, y2 = b // 20, b % 20
+        manhattan_distance += abs(x1 - x2) + abs(y1 - y2)
+    return manhattan_distance / len(ground_truth)
+
 def map_score(ground_truth, logits_lm):
     MAP = 0
     pred_topk = logits_lm.cpu().data.numpy()
@@ -122,7 +133,10 @@ def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask
     top100_token, top100_score = topk(ground_truth, logits_lm, 100)
     print("top100:", top100_token, top100_score)
 
+    MANHATTAN = manhattan_distance(ground_truth, logits_lm)
+    print("manhattan distance:", MANHATTAN)
+
     MAP = map_score(ground_truth, logits_lm)
     print("MAP score:", MAP)
 
-    return accuracy_score, fuzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, MAP, wrong_pre
+    return accuracy_score, fuzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, MAP, MANHATTAN, wrong_pre

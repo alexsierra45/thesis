@@ -123,7 +123,8 @@ class Exp_Main(Exp_Basic):
                 
                 # Ajustamos la máscara `input_mask` para que coincida con `logits_lm`
                 batch_size, seq_len, num_classes = logits_lm.size()
-                valid_mask = input_mask[:, :seq_len].unsqueeze(2).expand(-1, -1, num_classes).bool()
+                # valid_mask = input_mask[:, :seq_len].unsqueeze(2).expand(-1, -1, num_classes).bool()
+                valid_mask = input_mask.unsqueeze(-1).expand_as(logits_lm).bool()
 
                 # Filtra logits_lm y masked_tokens utilizando valid_mask
                 logits_lm_filtered = logits_lm[valid_mask]
@@ -169,7 +170,7 @@ class Exp_Main(Exp_Basic):
         self.model.train()
         total_loss = torch.mean(torch.stack(total_loss))
 
-        accuracy_score, fuzzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, map_score, wrong_pre = get_evalution(
+        accuracy_score, fuzzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, map_score, manhattan_distance, wrong_pre = get_evalution(
         ground_truth=total_masked_tokens, logits_lm=predict_prob, exchange_matrix=self.exchange_map)
 
         return 'test accuracy score = ' + '{:.6f}'.format(accuracy_score) + '\n' \
@@ -180,6 +181,7 @@ class Exp_Main(Exp_Basic):
             + 'test top30 score = '+ '{:.6f}'.format(top30_score) + '\n'\
             + 'test top50 score = '+ '{:.6f}'.format(top50_score) + '\n'\
             + 'test top100 score = '+ '{:.6f}'.format(top100_score) + '\n' \
+            + 'test manhattan distance = '+ '{:.6f}'.format(manhattan_distance) + '\n' \
             + 'test MAP score = '+ '{:.6f}'.format(map_score) + '\n' , total_loss, accuracy_score, wrong_pre, predictions
         
     def infer(self, setting):
@@ -203,14 +205,59 @@ class Exp_Main(Exp_Basic):
         criterion = self._select_criterion()
         result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
 
-        f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
-        f.write("test loss: %.6f \n" %  test_loss)
-        f.write(result)
-        f.write('\n'.join(wrong_pre))
-        f.close()
+        # f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
+        # f.write("test loss: %.6f \n" %  test_loss)
+        # f.write(result)
+        # f.write('\n'.join(wrong_pre))
+        # f.close()
 
         return
     
+    def evaluate_all_models(self):
+        """
+        Método para evaluar todos los modelos almacenados en la carpeta especificada.
+        """
+        models_folder =self.args.root_path + '/result'
+        infer_result_path = os.path.join(self.args.root_path, 'infer_result')
+        if not os.path.exists(infer_result_path):
+            os.mkdir(infer_result_path)
+
+        # Obtener la lista de modelos en la carpeta
+        model_files = [f for f in os.listdir(models_folder) if f.endswith('.pth')]
+
+        if not model_files:
+            print('No models found in the specified folder:', models_folder)
+            return
+
+        # Evaluar cada modelo
+        for model_file in model_files:
+            setting = os.path.splitext(model_file)[0]  # Extraer el nombre base del modelo
+            model_path = os.path.join(models_folder, model_file)
+
+            # Verificar si el modelo existe
+            if not os.path.exists(model_path):
+                print(f'Model file {model_file} does not exist. Skipping...')
+                continue
+
+            # Cargar el modelo
+            self.load_weight(model_path)
+            print(f'Loaded model {model_file} successfully')
+
+            # Preparar el loader y el criterio de evaluación
+            test_loader = self.data_provider.get_loader(flag='infer', args=self.args)
+            criterion = self._select_criterion()
+
+            # Evaluar el modelo
+            result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
+
+            # Guardar los resultados
+            output_file = os.path.join(infer_result_path, setting + '.txt')
+            with open(output_file, 'w') as f:
+                f.write("Test loss: %.6f\n" % test_loss)
+                f.write(result + '\n')
+                f.write('\n'.join(wrong_pre))
+            print(f'Results for model {model_file} saved in {output_file}')
+
     def calculate_loss(self, logits_lm, masked_tokens, criterion):
         if self.args.loss == "spatial_loss":
             loss_lm = criterion.Spatial_Loss(self.exchange_map, logits_lm.view(-1, self.vocab_size),

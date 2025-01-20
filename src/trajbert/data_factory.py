@@ -34,11 +34,12 @@ def data_preprocess(args):
 
     if args.data_type in ['cdr', 'tdrive', 'etecsa', 'humob']:
         train_data_name = f'{args.data_type}/train.h5'
-        if args.is_training:
+        if args.is_training == 1:
             test_data_name = f'{args.data_type}/{'test' if args.data_type in ['cdr', 'tdrive'] 
                                                  else 'valid'}_{args.pre_len}.h5'
         else:
             test_data_name = f'{args.data_type}/test_{args.pre_len}.h5'
+            # test_data_name = f'{args.data_type}/hidden/test_{args.pre_len}_{int(args.mask_perc * 100)}_{int(args.hid_perc * 100)}.h5'
     else:
         raise Exception('please check data type', args.data_type)
     

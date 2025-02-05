@@ -36,7 +36,9 @@ class TrajBERT(nn.Module):
 
         # Si se utiliza el historial (use_his), procesar input_prior y input_next
         if self.args.use_his:
+            input_prior = input_prior.long()  # Asegúrate de que sea del tipo correcto
             input_prior_embedded = self.embedding.tok_embed(input_prior)
+            input_next = input_next.long()
             input_next_embedded = self.embedding.tok_embed(input_next)
 
         # Pasar por las capas del Transformer

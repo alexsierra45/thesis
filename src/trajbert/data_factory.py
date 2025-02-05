@@ -1,4 +1,5 @@
 import math
+import pickle
 import torch.utils.data as Data
 import torch
 from random import *
@@ -38,7 +39,9 @@ def data_preprocess(args):
             test_data_name = f'{args.data_type}/{'test' if args.data_type in ['cdr', 'tdrive'] 
                                                  else 'valid'}_{args.pre_len}.h5'
         else:
-            test_data_name = f'{args.data_type}/test_{args.pre_len}.h5'
+            test_data_name = f'{args.data_type}/distance/far_distance.h5'
+            # test_data_name = f'{args.data_type}/density/high_density.h5'
+            # test_data_name = f'{args.data_type}/test_{args.pre_len}.h5'
             # test_data_name = f'{args.data_type}/hidden/test_{args.pre_len}_{int(args.mask_perc * 100)}_{int(args.hid_perc * 100)}.h5'
     else:
         raise Exception('please check data type', args.data_type)
@@ -52,6 +55,10 @@ def data_preprocess(args):
     train_data = dataset.gen_train_data()  # [seq, user_index, day]
     test_data = dataset.gen_test_data()  # [seq, masked_pos, masked_tokens, user_index, day]
 
+    vocab_file_path = os.path.join(args.root_path, args.data_path, f'{args.data_type}/vocab.pkl')
+
+    # if args.is_training == 1:
+    # Construir vocabulario
     train_word_list = list(
         set(str(train_data[i][0][j]) for i in range(len(train_data)) for j in range(len(train_data[i][0]))))
     test_word_list = list(
@@ -65,7 +72,7 @@ def data_preprocess(args):
         test_word_list.remove('[MASK]')
     except:
         pass
-    
+
     train_word_list.extend(test_word_list)
     train_word_list.extend(test_masked_list)
     train_word_list = list(set(train_word_list))
@@ -80,21 +87,40 @@ def data_preprocess(args):
             print("error")
         word2idx[str(w)] = i + 4
 
+        # # Guardar el vocabulario
+        # with open(vocab_file_path, 'wb') as f:
+        #     pickle.dump(word2idx, f)
+        # print(f"Saved vocabulary at {vocab_file_path}")
+
+    # else:
+    #     # Cargar el vocabulario desde archivo
+    #     if os.path.exists(vocab_file_path):
+    #         with open(vocab_file_path, 'rb') as f:
+    #             word2idx = pickle.load(f)
+            
+    #         # Validar que los valores sean enteros
+    #         word2idx = {word: int(idx) for word, idx in word2idx.items()}
+            
+    #         print(f"Loaded vocab from {vocab_file_path}")
+    #     else:
+    #         raise FileNotFoundError(f"Not found vocabulary file at {vocab_file_path}")
+
     vocab_size = len(word2idx)
 
     train_token_list = list()
     train_user_list = list()
     train_day_list = list()
     max_value = 0
+    pad_idx = word2idx.get('[PAD]', 0) 
     for sentence in train_data:
         seq, user_index, day = sentence
-        for s in seq:
-            try:
-                max_value = max(max_value, word2idx[str(s)])
-            except:
-                print(s)
+        # for s in seq:
+        #     try:
+        #         max_value = max(max_value, word2idx[str(s)])
+        #     except:
+        #         print(s)
                 
-        arr = [word2idx[s] for s in seq]
+        arr = [word2idx.get(s, pad_idx) for s in seq]
         train_token_list.append(arr)
         train_user_list.append(user_index)
         train_day_list.append(day)
@@ -137,16 +163,23 @@ def make_train_data(token_list, word2idx, max_pred):
 
 def make_test_data(test_data, word2idx):
     # [seq, masked_pos, masked_tokens, user_index, day]
-    total_test_data = []
-    for sentence in test_data:
-        arr = [word2idx[s] for s in sentence[0]]
-        user = sentence[3]
-        arr = [word2idx['[CLS]']] + arr + [word2idx['[SEP]']]
-        masked_pos = [pos + 1 for pos in sentence[1]]
-        masked_tokens = [word2idx[str(s)] for s in sentence[2]]
-        day = sentence[4]
-        total_test_data.append([arr, masked_tokens, masked_pos, user, day])
-    return total_test_data
+        total_test_data = []
+        pad_idx = word2idx.get('[PAD]', 0)  # Índice para el token [PAD] (default a 0 si no está definido)
+
+        for sentence in test_data:
+            # Convertir cada token de la secuencia a su índice, usando [PAD] si el token no está en word2idx
+            arr = [word2idx.get(s, pad_idx) for s in sentence[0]]
+            user = sentence[3]
+            # Agregar los tokens especiales [CLS] y [SEP]
+            arr = [word2idx['[CLS]']] + arr + [word2idx['[SEP]']]
+            # Ajustar las posiciones enmascaradas y los tokens enmascarados
+            masked_pos = [pos + 1 for pos in sentence[1]]  # Ajustar índices por el desplazamiento de [CLS]
+            masked_tokens = [word2idx.get(str(s), pad_idx) for s in sentence[2]]  # Usar [PAD] para desconocidos
+            day = sentence[4]
+            # Añadir los datos procesados a la lista final
+            total_test_data.append([arr, masked_tokens, masked_pos, user, day])
+
+        return total_test_data
 
 def get_dis_score(dis):
     return 1 / math.log(1 + dis, 2)

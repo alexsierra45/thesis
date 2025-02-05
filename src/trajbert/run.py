@@ -11,17 +11,17 @@ def main(masked_percent=0.15, hidden_percent=0, parser = None):
         parser.add_argument('--root_path', type=str, default='src/trajbert', help='root path') 
         parser.add_argument('--data_path', type=str, default='./data/', help='data path ') 
         
-        parser.add_argument('--pre_len', type=str, default='5', help='predict len') 
+        parser.add_argument('--pre_len', type=str, default='3', help='predict len') 
         parser.add_argument('--mask_perc', type=int, default=masked_percent, help='masked percent') 
         parser.add_argument('--hid_perc', type=int, default=hidden_percent, help='hidden percent') 
-        parser.add_argument('--data_type', type=str, default='humob', help='database name')
+        parser.add_argument('--data_type', type=str, default='etecsa', help='database name')
         parser.add_argument('--infer_data_path', type=str, default='', help='infer data path ') 
         parser.add_argument('--infer_model_path', type=str, default='', help='infer model path ')
 
         # model define
         parser.add_argument('--d_model', default=512, type=int, help='embed size')
         parser.add_argument('--model',type=str, default='trajbert', help='trajbert')
-        parser.add_argument('--head', default=4, type=int, help='multi head num')
+        parser.add_argument('--head', default=2, type=int, help='multi head num')
         parser.add_argument('--layer', default=2, type=int, help='layer')
         parser.add_argument('--seq_len', default=50, type=int, help='sequence lenght')
         parser.add_argument('--if_posiemb', default=1, type=int, help='position embedding')
@@ -33,7 +33,7 @@ def main(masked_percent=0.15, hidden_percent=0, parser = None):
         parser.add_argument('--is_training', type=int, default=0, help='model is training')
         parser.add_argument('--itr', type=int, default=1, help='experiments times')
         parser.add_argument('--bs', default=256, type=int, help='batch size')
-        parser.add_argument('--epoch', default=10, type=int, help='epoch size')
+        parser.add_argument('--epoch', default=20, type=int, help='epoch size')
         parser.add_argument('--loss', default='spatial_loss', type=str, help='loss function')
         parser.add_argument('--load_checkpoint', default=0, type=int, help='if continue train')
 

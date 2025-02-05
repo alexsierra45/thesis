@@ -24,7 +24,7 @@ class Exp_Main(Exp_Basic):
         model_dict = {
             'trajbert': TrajBERT
         }
-        model = model_dict[self.args.model](args = self.args,vocab_size = vocab_size).float()
+        model = model_dict[self.args.model](args = self.args, vocab_size = vocab_size).float()
 
         return model
     
@@ -170,8 +170,14 @@ class Exp_Main(Exp_Basic):
         self.model.train()
         total_loss = torch.mean(torch.stack(total_loss))
 
-        accuracy_score, fuzzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, map_score, manhattan_distance, wrong_pre = get_evalution(
-        ground_truth=total_masked_tokens, logits_lm=predict_prob, exchange_matrix=self.exchange_map)
+        distance_type = 'none'
+        if self.args.data_type == 'etecsa':
+            distance_type = 'geospatial'
+        elif self.args.data_type == 'humob':
+            distance_type = 'manhattan'
+
+        accuracy_score, fuzzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, map_score, distance, wrong_pre = get_evalution(
+        ground_truth=total_masked_tokens, logits_lm=predict_prob, exchange_matrix=self.exchange_map, distance=distance_type)
 
         return 'test accuracy score = ' + '{:.6f}'.format(accuracy_score) + '\n' \
             + 'fuzzzy score = ' +  '{:.6f}'.format(fuzzzy_score) + '\n'\
@@ -181,7 +187,7 @@ class Exp_Main(Exp_Basic):
             + 'test top30 score = '+ '{:.6f}'.format(top30_score) + '\n'\
             + 'test top50 score = '+ '{:.6f}'.format(top50_score) + '\n'\
             + 'test top100 score = '+ '{:.6f}'.format(top100_score) + '\n' \
-            + 'test manhattan distance = '+ '{:.6f}'.format(manhattan_distance) + '\n' \
+            + 'test distance = '+ str(distance) + '\n' \
             + 'test MAP score = '+ '{:.6f}'.format(map_score) + '\n' , total_loss, accuracy_score, wrong_pre, predictions
         
     def infer(self, setting):

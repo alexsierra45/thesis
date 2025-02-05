@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import pandas as pd
 
 def make_coocurrence_matrix(token_list, token_size, alpha=98, theta=1000):
     token_list = [list(filter(lambda x: x > 3, token)) for token in token_list]
@@ -67,6 +68,20 @@ def topk(ground_truth, logits_lm, k):
     topk_score = topk_token / len(ground_truth)
     return topk_token, topk_score
 
+class Distance:
+    def __init__(self, values: np.ndarray):
+        self.values = values
+        if len(values) > 0:
+            self.mean = values.mean()
+            self.median = np.median(values)
+            self.std = values.std()
+            self.max = values.max()
+
+    def __str__(self):
+        if len(self.values) == 0:
+            return 'not calculated'
+        return f"\n\tmean: {self.mean}\n\tmedian: {self.median}\n\tstd: {self.std}\n\tmax: {self.max}"
+
 def manhattan_distance(ground_truth, logits_lm):
     manhattan_distance = 0
     pred_topk = logits_lm.cpu().data.numpy()
@@ -77,6 +92,42 @@ def manhattan_distance(ground_truth, logits_lm):
         x2, y2 = b // 20, b % 20
         manhattan_distance += abs(x1 - x2) + abs(y1 - y2)
     return manhattan_distance / len(ground_truth)
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """
+    Calcula la distancia en kilómetros entre dos puntos geográficos usando la fórmula de Haversine.
+    """
+    R = 6371  # Radio de la Tierra en kilómetros
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])  # Convertir a radianes
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+
+    return R * c
+
+def geospatial_distance(ground_truth, logits_lm):
+    distances = []
+    pred_topk = logits_lm.cpu().data.numpy()
+
+    zn_pos = pd.read_csv('src/trajbert/data/etecsa/zones_centroids.csv')
+    zone_coords = zn_pos.set_index('zone')[['latitude', 'longitude']].to_dict(orient='index')
+
+    for i in range(len(ground_truth)):
+        lat1, lon1 = zone_coords[ground_truth[i] + 4]['latitude'], zone_coords[ground_truth[i] + 4]['longitude']
+
+        lat2, lon2 = zone_coords[pred_topk[i][0] + 4]['latitude'], zone_coords[pred_topk[i][0] + 4]['longitude']
+
+        # Calcular la distancia geoespacial usando la función haversine_distance
+        d = haversine_distance(lat1, lon1, lat2, lon2)
+        distances.append(d)
+
+    distances = np.array(distances)
+
+    return Distance(distances)
+    # return geospatial_distance / len(ground_truth)  # Promedio de las distancias
 
 def map_score(ground_truth, logits_lm):
     MAP = 0
@@ -89,7 +140,7 @@ def map_score(ground_truth, logits_lm):
             MAP += 1.0 / rank[0][0]
     return MAP / len(ground_truth)
 
-def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask_len=0):
+def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None, mask_len=0, distance='none'):
     pred_acc = logits_lm[:, 0].cpu().data.numpy()
     
     accuracy_token = 0
@@ -133,10 +184,15 @@ def get_evalution(ground_truth, logits_lm, exchange_matrix, input_id = None,mask
     top100_token, top100_score = topk(ground_truth, logits_lm, 100)
     print("top100:", top100_token, top100_score)
 
-    MANHATTAN = manhattan_distance(ground_truth, logits_lm)
-    print("manhattan distance:", MANHATTAN)
+    Distance(np.array([]))
+    if distance == 'manhattan':
+        DISTANCE = manhattan_distance(ground_truth, logits_lm)
+        print("manhattan distance:", DISTANCE)
+    elif distance == 'geospatial':
+        DISTANCE = geospatial_distance(ground_truth, logits_lm)
+        print("geospatial distance:", DISTANCE)
 
     MAP = map_score(ground_truth, logits_lm)
     print("MAP score:", MAP)
 
-    return accuracy_score, fuzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, MAP, MANHATTAN, wrong_pre
+    return accuracy_score, fuzzy_score, top3_score, top5_score, top10_score, top30_score, top50_score, top100_score, MAP, DISTANCE, wrong_pre

@@ -3,34 +3,41 @@ import torch
 import pandas as pd
 
 def make_coocurrence_matrix(token_list, token_size, alpha=98, theta=1000):
-    token_list = [list(filter(lambda x: x > 3, token)) for token in token_list]
-    exchange_matrix = np.zeros(shape=(token_size, token_size))
-    for token in token_list:
-        for i in range(1, len(token)):
-            if token[i] == token[i - 1]:
-                continue
-            exchange_matrix[token[i - 1]][token[i]] += 1
+    # Filtrar tokens mayores que 3 y convertir cada lista a un array de NumPy
+    token_list = [np.array(token)[np.array(token) > 3] for token in token_list]
     
-    # smoothing
-    exchange_matrix = np.where(exchange_matrix >= alpha, exchange_matrix, 0) 
+    # Inicializar la matriz de coocurrencia
+    exchange_matrix = np.zeros((token_size, token_size), dtype=np.float32)
+    
+    # Para cada lista de tokens, actualizar la matriz de coocurrencia de forma vectorizada
+    for tokens in token_list:
+        if tokens.size < 2:
+            continue
+        # Crear dos arrays: uno con el token actual y otro con el token siguiente
+        prev_tokens = tokens[:-1]
+        next_tokens = tokens[1:]
+        # Excluir los casos en que dos tokens consecutivos sean iguales
+        mask = prev_tokens != next_tokens
+        prev_tokens = prev_tokens[mask]
+        next_tokens = next_tokens[mask]
+        # Sumar en la matriz de coocurrencia de forma vectorizada
+        np.add.at(exchange_matrix, (prev_tokens, next_tokens), 1)
+    
+    # Suavizado:
+    exchange_matrix = np.where(exchange_matrix >= alpha, exchange_matrix, 0)
     exchange_matrix = exchange_matrix / theta
     exchange_matrix = np.where(exchange_matrix > 0, np.exp(exchange_matrix), 0)
     
-    # row normalization
-    for i in range(token_size):
-        row_sum = sum(exchange_matrix[i]) + np.exp(1)
-        for j in range(token_size):
-            if exchange_matrix[i][j] != 0:
-                exchange_matrix[i][j] = exchange_matrix[i][j] / row_sum
+    # Normalización de filas:
+    row_sum = exchange_matrix.sum(axis=1) + np.exp(1)
+    exchange_matrix = exchange_matrix / row_sum[:, np.newaxis]
     
-    # diagonal equal 1
-    for i in range(token_size):
-        exchange_matrix[i][i] = 1
-
-    # simetrization
-    for i in range(token_size):
-        for j in range(token_size):
-            exchange_matrix[i][j] = max(exchange_matrix[i][j], exchange_matrix[j][i])
+    # Establecer la diagonal en 1:
+    np.fill_diagonal(exchange_matrix, 1)
+    
+    # Simetrización:
+    exchange_matrix = np.maximum(exchange_matrix, exchange_matrix.T)
+    
     return exchange_matrix
 
 def adjust_learning_rate(optimizer, epoch, args):

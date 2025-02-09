@@ -211,11 +211,11 @@ class Exp_Main(Exp_Basic):
         criterion = self._select_criterion()
         result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
 
-        # f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
-        # f.write("test loss: %.6f \n" %  test_loss)
-        # f.write(result)
-        # f.write('\n'.join(wrong_pre))
-        # f.close()
+        f = open(self.args.root_path + '/infer_result/' + setting + '.txt', 'a+')
+        f.write("test loss: %.6f \n" %  test_loss)
+        f.write(result)
+        f.write('\n'.join(wrong_pre))
+        f.close()
 
         return
     

@@ -1,0 +1,179 @@
+\appendix
+
+\chapter{Particularidades de Implementación}
+
+\section{Formato de Entrada de Datos de TrajBERT}
+\label{apx:trajbert_data_format}
+
+En el trabajo original \cite{si2023trajbert}, el formato de entrada de datos consistía en recibir todas las entradas en forma de cadena de texto, por lo que era necesario transformar esta información a un formato estructurado para su procesamiento. A continuación se presenta una implementación en Python que ilustra la clase encargada de generar los datos de entrenamiento y prueba:
+
+\begin{lstlisting}[language=Python, caption={Clase encargada de generar los datos de entrenamiento y prueba.}]
+class DataSet:
+    def __init__(self, train_df, test_df):
+        self.train_df = train_df
+        self.test_df = test_df
+
+    def gen_train_data(self):
+        # ['trajectory', 'user_index', 'day']
+        records = []
+        for _, row in self.train_df.iterrows():
+            seq, user_index, day = row['trajectory'], row['user_index'], row['day']
+            records.append([seq, user_index, day])
+        print("All train length is " + str(len(records)))
+        return records
+
+    def gen_test_data(self):
+        # ['trajectory', 'masked_pos', 'masked_tokens']
+        test_df = self.test_df
+        records = []
+        for _, row in test_df.iterrows():
+            seq, masked_pos, masked_tokens = row['trajectory'], row['masked_pos'], row['masked_tokens']
+            user_index, day = row['user_index'], row['day']
+            seq, masked_pos, masked_tokens = list(seq.split()), list(map(int, masked_pos.split())), \
+                                                list(map(int, masked_tokens.split()))
+            records.append([seq, masked_pos, masked_tokens, user_index, day])
+        print("All test length is " + str(len(records)))
+        return records
+\end{lstlisting}
+
+
+\section{Código Fuente Modificado de TrajBERT}
+\label{apx:source_code_modified}
+
+Se optimizó la construcción de la matriz de co-ocurrencia utilizando operaciones vectorizadas con NumPy. Se eliminó el uso de bucles anidados y se aplicaron técnicas como indexación booleana para actualizaciones eficientes, normalización mediante difusión y simetrización rápida.
+
+\begin{lstlisting}[language=Python, caption={Método optimizado para la construcción de la matriz de co-ocurrencia utilizando operaciones vectorizadas con NumPy.}]
+    import numpy as np
+    
+    def make_coocurrence_matrix(token_list, token_size, alpha=98, theta=1000):
+    # Filtrar tokens mayores que 3 y convertir cada lista a un array de NumPy
+    token_list = [np.array(token)[np.array(token) > 3] for token in token_list]
+    
+    # Inicializar la matriz de coocurrencia
+    exchange_matrix = np.zeros((token_size, token_size), dtype=np.float32)
+    
+    # Para cada lista de tokens, actualizar la matriz de coocurrencia de forma vectorizada
+    for tokens in token_list:
+        if tokens.size < 2:
+            continue
+        # Crear dos arrays: uno con el token actual y otro con el token siguiente
+        prev_tokens = tokens[:-1]
+        next_tokens = tokens[1:]
+        # Excluir los casos en que dos tokens consecutivos sean iguales
+        mask = prev_tokens != next_tokens
+        prev_tokens = prev_tokens[mask]
+        next_tokens = next_tokens[mask]
+        # Sumar en la matriz de coocurrencia de forma vectorizada
+        np.add.at(exchange_matrix, (prev_tokens, next_tokens), 1)
+    
+    # Suavizado:
+    exchange_matrix = np.where(exchange_matrix >= alpha, exchange_matrix, 0)
+    exchange_matrix = exchange_matrix / theta
+    exchange_matrix = np.where(exchange_matrix > 0, np.exp(exchange_matrix), 0)
+    
+    # Normalizacion de filas:
+    row_sum = exchange_matrix.sum(axis=1) + np.exp(1)
+    exchange_matrix = exchange_matrix / row_sum[:, np.newaxis]
+    
+    # Establecer la diagonal en 1:
+    np.fill_diagonal(exchange_matrix, 1)
+    
+    # Simetrizacion:
+    exchange_matrix = np.maximum(exchange_matrix, exchange_matrix.T)
+    
+    return exchange_matrix
+\end{lstlisting}
+
+
+\section{Implementaciones Adicionales en TrajBERT}
+
+\subsection{Función de colación personalizada}
+\label{apx:dynamic_padding}
+
+Para permitir que la cantidad de ubicaciones enmascaradas en trayectorias analizadas en un mismo lote fuera variable, se implementó una función de colación personalizada. Esta función ajusta automáticamente las secuencias de entrada, aplica relleno dinámico y genera máscaras binarias, permitiendo procesar lotes de diferentes tamaños sin comprometer la estructura del modelo.
+
+\begin{lstlisting}[language=Python, caption={Función de colación para manejo dinámico de secuencias.}]
+import torch
+from torch.nn.utils.rnn import pad_sequence
+
+def custom_collate_fn(batch):
+    """
+    Maneja el relleno dinamico y genera mascaras para las secuencias de longitud variable.
+    """
+    # Separar los componentes del lote
+    input_ids, masked_tokens, masked_pos, user_ids, day_ids, \
+    input_prior, input_next, input_prior_dis, input_next_dis = zip(*batch)
+
+    # Rellenar dinamicamente las secuencias
+    input_ids = pad_sequence(input_ids, batch_first=True, padding_value=0)
+    masked_tokens = pad_sequence(masked_tokens, batch_first=True, padding_value=0)
+    masked_pos = pad_sequence(masked_pos, batch_first=True, padding_value=0)
+    input_prior = pad_sequence(input_prior, batch_first=True, padding_value=0)
+    input_next = pad_sequence(input_next, batch_first=True, padding_value=0)
+
+    # Rellenar las distancias (tensores de punto flotante)
+    input_prior_dis = pad_sequence(input_prior_dis, batch_first=True, padding_value=0.0)
+    input_next_dis = pad_sequence(input_next_dis, batch_first=True, padding_value=0.0)
+
+    # Generar mascara de entrada
+    input_mask = (masked_tokens != 0).long()
+
+    # Convertir user_ids y day_ids a tensores
+    user_ids = torch.stack(user_ids)
+    day_ids = torch.stack(day_ids)
+
+    return (input_ids, masked_tokens, masked_pos, user_ids, day_ids, 
+            input_prior, input_next, input_prior_dis, input_next_dis, input_mask)
+\end{lstlisting}
+
+\subsection{Función evaluación automatizada}
+\label{apx:evaluate_all_models}
+
+Método diseñado para evaluar automáticamente todos los modelos almacenados durante el entrenamiento. La función establece las rutas tanto para los modelos entrenados como para la carpeta de resultados, lista y carga todos los archivos y configura un DataLoader. Posteriormente, evalúa cada modelo utilizando un criterio específico, calculando métricas como la pérdida y la precisión, y almacena los resultados en archivos de texto, facilitando así la comparación y el análisis del desempeño de los modelos.
+
+\begin{lstlisting}[language=Python, caption={Función para evaluar de forma automatizada todos los modelos almacenados.}]
+    def evaluate_all_models(self):
+    """
+    Metodo para evaluar todos los modelos almacenados en la carpeta especificada.
+    """
+    models_folder =self.args.root_path + '/result'
+    infer_result_path = os.path.join(self.args.root_path, 'infer_result')
+    if not os.path.exists(infer_result_path):
+        os.mkdir(infer_result_path)
+
+    # Obtener la lista de modelos en la carpeta
+    model_files = [f for f in os.listdir(models_folder) if f.endswith('.pth')]
+
+    if not model_files:
+        print('No models found in the specified folder:', models_folder)
+        return
+
+    # Evaluar cada modelo
+    for model_file in model_files:
+        setting = os.path.splitext(model_file)[0]  # Extraer el nombre base del modelo
+        model_path = os.path.join(models_folder, model_file)
+
+        # Verificar si el modelo existe
+        if not os.path.exists(model_path):
+            print(f'Model file {model_file} does not exist. Skipping...')
+            continue
+
+        # Cargar el modelo
+        self.load_weight(model_path)
+        print(f'Loaded model {model_file} successfully')
+
+        # Preparar el loader y el criterio de evaluacion
+        test_loader = self.data_provider.get_loader(flag='infer', args=self.args)
+        criterion = self._select_criterion()
+
+        # Evaluar el modelo
+        result, test_loss, accuracy_score, wrong_pre, predictions = self.test(test_loader, criterion)
+
+        # Guardar los resultados
+        output_file = os.path.join(infer_result_path, setting + '.txt')
+        with open(output_file, 'w') as f:
+            f.write("Test loss: %.6f\n" % test_loss)
+            f.write(result + '\n')
+            f.write('\n'.join(wrong_pre))
+        print(f'Results for model {model_file} saved in {output_file}')
+\end{lstlisting}
